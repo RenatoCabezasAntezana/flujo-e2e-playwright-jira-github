@@ -54,12 +54,13 @@ jobs:
 
       - name: Crear Bug en Jira si todos los intentos fallaron
         if: steps.final_result.outputs.status == 'failed'
+        id: create_bug
         env:
           ATLASSIAN_BASE_URL: ${{ secrets.ATLASSIAN_BASE_URL }}
           ATLASSIAN_EMAIL: ${{ secrets.ATLASSIAN_EMAIL }}
           ATLASSIAN_API_TOKEN: ${{ secrets.ATLASSIAN_API_TOKEN }}
         run: |
-          curl -X POST "$ATLASSIAN_BASE_URL/rest/api/3/issue" \
+          BUG_KEY=$(curl -s -X POST "$ATLASSIAN_BASE_URL/rest/api/3/issue" \
             -u "$ATLASSIAN_EMAIL:$ATLASSIAN_API_TOKEN" \
             -H "Content-Type: application/json" \
             -d '{
@@ -80,7 +81,21 @@ jobs:
                 "issuetype": { "name": "Bug" },
                 "priority": { "name": "High" }
               }
-            }'
+            }' | python3 -c "import sys,json; print(json.load(sys.stdin)['key'])")
+
+          echo "bug_key=$BUG_KEY" >> $GITHUB_OUTPUT
+          echo "Bug creado: $BUG_KEY"
+
+          curl -s -X POST "$ATLASSIAN_BASE_URL/rest/api/3/issueLink" \
+            -u "$ATLASSIAN_EMAIL:$ATLASSIAN_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"type\": { \"name\": \"Blocks\" },
+              \"inwardIssue\": { \"key\": \"$BUG_KEY\" },
+              \"outwardIssue\": { \"key\": \"SB-73\" }
+            }"
+
+          echo "Vinculo creado: $BUG_KEY -> SB-73"
 
       - name: Fallar el pipeline si los tests no pasaron
         if: steps.final_result.outputs.status == 'failed'
