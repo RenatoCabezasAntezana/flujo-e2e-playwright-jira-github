@@ -1,0 +1,87 @@
+name: E2E Tests - SauceDemo Login
+
+on:
+  push:
+    branches: [ main, master, 'feature/**' ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Run E2E Tests (intento 1)
+        id: test_run_1
+        run: npm run cucumber
+        continue-on-error: true
+
+      - name: Healing - Intento 2
+        id: test_run_2
+        if: steps.test_run_1.outcome == 'failure'
+        run: npm run cucumber
+        continue-on-error: true
+
+      - name: Healing - Intento 3
+        id: test_run_3
+        if: steps.test_run_2.outcome == 'failure'
+        run: npm run cucumber
+        continue-on-error: true
+
+      - name: Evaluar resultado final
+        id: final_result
+        run: |
+          if [ "${{ steps.test_run_1.outcome }}" == "success" ] || \
+             [ "${{ steps.test_run_2.outcome }}" == "success" ] || \
+             [ "${{ steps.test_run_3.outcome }}" == "success" ]; then
+            echo "status=passed" >> $GITHUB_OUTPUT
+          else
+            echo "status=failed" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Crear Bug en Jira si todos los intentos fallaron
+        if: steps.final_result.outputs.status == 'failed'
+        env:
+          ATLASSIAN_BASE_URL: ${{ secrets.ATLASSIAN_BASE_URL }}
+          ATLASSIAN_EMAIL: ${{ secrets.ATLASSIAN_EMAIL }}
+          ATLASSIAN_API_TOKEN: ${{ secrets.ATLASSIAN_API_TOKEN }}
+        run: |
+          curl -X POST "$ATLASSIAN_BASE_URL/rest/api/3/issue" \
+            -u "$ATLASSIAN_EMAIL:$ATLASSIAN_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "fields": {
+                "project": { "key": "SB" },
+                "summary": "[BUG] Fallo en tests E2E Login SauceDemo - SB-73",
+                "description": {
+                  "type": "doc",
+                  "version": 1,
+                  "content": [{
+                    "type": "paragraph",
+                    "content": [{
+                      "type": "text",
+                      "text": "Los tests E2E del ticket SB-73 fallaron después de 3 intentos en el pipeline de GitHub Actions. Branch: ${{ github.ref_name }}. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }]
+                  }]
+                },
+                "issuetype": { "name": "Bug" },
+                "priority": { "name": "High" }
+              }
+            }'
+
+      - name: Fallar el pipeline si los tests no pasaron
+        if: steps.final_result.outputs.status == 'failed'
+        run: exit 1
