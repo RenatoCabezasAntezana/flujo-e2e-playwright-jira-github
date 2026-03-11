@@ -2,7 +2,7 @@ name: E2E Tests - SauceDemo Login
 
 on:
   push:
-    branches: [ main, master, 'feature/**' ]
+    branches: [ main, master, 'feature/**', 'test/**' ]
   pull_request:
     branches: [ main, master ]
 
