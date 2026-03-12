@@ -24,6 +24,9 @@ jobs:
       - name: Install Playwright Browsers
         run: npx playwright install chromium --with-deps
 
+      - name: Crear carpeta de reportes
+        run: mkdir -p reports
+
       - name: Run E2E Tests (intento 1)
         id: test_run_1
         run: npm run cucumber
@@ -96,6 +99,14 @@ jobs:
             }"
 
           echo "Vinculo creado: $BUG_KEY -> SB-73"
+
+      - name: Publicar reporte Cucumber
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cucumber-report-${{ github.run_id }}
+          path: reports/
+          retention-days: 30
 
       - name: Fallar el pipeline si los tests no pasaron
         if: steps.final_result.outputs.status == 'failed'
