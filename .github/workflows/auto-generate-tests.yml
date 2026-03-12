@@ -1,0 +1,98 @@
+name: Auto Generate E2E Tests from Jira
+
+on:
+  # Disparado por Jira Automation cuando un ticket pasa a "En curso"
+  repository_dispatch:
+    types: [jira-ticket-in-progress]
+
+  # Disparo manual para probar sin Jira (ej: workflow_dispatch con ticket=SB-77)
+  workflow_dispatch:
+    inputs:
+      ticket:
+        description: 'Jira ticket key (ej: SB-77)'
+        required: true
+        type: string
+
+jobs:
+  generate-tests:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write        # para hacer push de la rama
+      pull-requests: write   # para crear el PR
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate E2E tests with Claude API
+        id: generate
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ATLASSIAN_BASE_URL: ${{ secrets.ATLASSIAN_BASE_URL }}
+          ATLASSIAN_EMAIL: ${{ secrets.ATLASSIAN_EMAIL }}
+          ATLASSIAN_API_TOKEN: ${{ secrets.ATLASSIAN_API_TOKEN }}
+          TICKET: ${{ github.event.client_payload.ticket || inputs.ticket }}
+        run: node scripts/generate-tests.js
+
+      - name: Create branch, commit and open PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TICKET: ${{ steps.generate.outputs.ticket }}
+          SUMMARY: ${{ steps.generate.outputs.summary }}
+          FILES: ${{ steps.generate.outputs.files }}
+          ATLASSIAN_BASE_URL: ${{ secrets.ATLASSIAN_BASE_URL }}
+        run: |
+          git config user.name "qa-senior-bot"
+          git config user.email "bot@github-actions.com"
+
+          BRANCH="feature/$TICKET"
+          git checkout -b $BRANCH
+
+          git add src/
+
+          if git diff --cached --quiet; then
+            echo "⚠️  No hay cambios para commitear — los archivos ya existen."
+            exit 0
+          fi
+
+          git commit -m "$(cat <<EOF
+          feat: auto-generate E2E tests for $TICKET
+
+          Tests generados automáticamente por qa-senior-bot usando Claude API (claude-opus-4-6).
+          Ticket: $TICKET — $SUMMARY
+
+          Co-Authored-By: qa-senior-bot <bot@github-actions.com>
+          EOF
+          )"
+
+          git push origin $BRANCH
+
+          gh pr create \
+            --title "Auto: E2E tests para $TICKET" \
+            --body "$(cat <<EOF
+          ## Tests generados automáticamente
+
+          **Ticket Jira:** [$TICKET]($ATLASSIAN_BASE_URL/browse/$TICKET)
+          **Título:** $SUMMARY
+
+          ### Archivos generados
+          $(echo $FILES | tr ',' '\n' | sed 's/^/- `/' | sed 's/$/`/')
+
+          ### Lista de revisión
+          - [ ] Los escenarios BDD reflejan los criterios de aceptación del ticket
+          - [ ] Los selectores del Page Object son correctos para SauceDemo
+          - [ ] Los step definitions cubren todos los pasos del feature file
+          - [ ] Los tests pasan localmente con \`npm run cucumber\`
+
+          ---
+          🤖 Generado por **qa-senior-bot** + Claude API (claude-opus-4-6 con adaptive thinking)
+          EOF
+          )" \
+            --base main
