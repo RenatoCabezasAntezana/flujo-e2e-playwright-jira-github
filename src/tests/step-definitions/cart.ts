@@ -10,14 +10,18 @@ let loginPage: LoginPage;
 let cartPage: CartPage;
 
 Before(async function () {
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch({ headless: process.env.HEADLESS !== "false" });
     context = await browser.newContext();
     page = await context.newPage();
     loginPage = new LoginPage(page);
     cartPage = new CartPage(page);
 });
 
-After(async function () {
+After(async function (scenario) {
+    if (scenario.result?.status === "FAILED") {
+        const screenshot = await page.screenshot({ fullPage: true });
+        this.attach(screenshot, "image/png");
+    }
     await browser.close();
 });
 

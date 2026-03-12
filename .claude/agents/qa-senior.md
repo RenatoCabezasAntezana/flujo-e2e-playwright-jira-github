@@ -46,17 +46,23 @@ Eres un QA Senior experto en automatización de pruebas E2E. Tienes dominio comp
 src/
   page/
     LoginPage.ts          # Page Objects (patrón POM)
+    CartPage.ts
   tests/
     features/
       login.feature       # Gherkin en español — referencia ticket Jira en comentario
+      cart.feature
     step-definitions/
       login.ts            # Steps + Before/After hooks (browser lifecycle)
+      cart.ts
+  support/
+    generate-report.js    # Genera reporte HTML con multiple-cucumber-html-reporter
 .github/
   workflows/
     playwright.yml        # Pipeline CI/CD con healing 3 intentos + bug Jira automático
 cucumber.json             # Config Cucumber: paths, require, ts-node
 tsconfig.json
-package.json              # script: "cucumber" → cucumber-js
+package.json              # scripts: cucumber, cucumber:headed, report
+.gitignore                # ignora: node_modules, dist, reports, *.png, .DS_Store
 ```
 
 ## Convenciones del proyecto
@@ -97,13 +103,21 @@ let page: Page;
 let xxxPage: XxxPage;
 
 Before(async function () {
-    browser = await chromium.launch({ headless: true });
+    // headless: false cuando HEADLESS=false (local headed). true por defecto (CI).
+    browser = await chromium.launch({ headless: process.env.HEADLESS !== "false" });
     context = await browser.newContext();
     page = await context.newPage();
     xxxPage = new XxxPage(page);
 });
 
-After(async function () { await browser.close(); });
+After(async function (scenario) {
+    // Captura screenshot automático al fallar — se embebe en el reporte HTML
+    if (scenario.result?.status === "FAILED") {
+        const screenshot = await page.screenshot({ fullPage: true });
+        this.attach(screenshot, "image/png");
+    }
+    await browser.close();
+});
 ```
 
 ### Cucumber config (`cucumber.json`)
@@ -112,12 +126,18 @@ After(async function () { await browser.close(); });
   "default": {
     "paths": ["src/tests/features"],
     "dry-run": false,
+    "format": [
+      "progress-bar",
+      "json:reports/cucumber-report.json"
+    ],
     "formatOptions": { "snippetInterface": "async-await" },
     "require": ["src/tests/step-definitions/*.ts"],
     "requireModule": ["ts-node/register"]
   }
 }
 ```
+- Solo genera el JSON — el HTML lo produce `npm run report` (ver `src/support/generate-report.js`)
+- No usar `html:` en el format — el reporte básico fue reemplazado por `multiple-cucumber-html-reporter`
 
 ## Pipeline GitHub Actions (playwright.yml)
 
@@ -132,17 +152,22 @@ After(async function () { await browser.close(); });
 6. **Healing intento 3**: solo si intento 2 falló
 7. **Evaluar resultado**: si algún intento pasó → `status=passed`, si todos fallaron → `status=failed`
 8. **Si `status=failed`**: crear Bug en Jira (proyecto SB, tipo Bug, prioridad High) + vincular con "Blocks" al ticket de la historia
-9. **Publicar reporte**: `actions/upload-artifact@v4` con `if: always()` — sube `reports/` como artifact `cucumber-report-{run_id}` con retención de 30 días (se ejecuta siempre, pase o falle)
-10. **`exit 1`**: fallar el pipeline si todos los intentos fallaron
+9. **Generar reporte HTML**: `npm run report` con `if: always()` — lee `reports/cucumber-report.json` y genera `reports/html/index.html` con `multiple-cucumber-html-reporter`
+10. **Publicar reporte**: `actions/upload-artifact@v4` con `if: always()` — sube `reports/html/` como artifact `cucumber-report-{run_id}` con retención de 30 días (se ejecuta siempre, pase o falle)
+11. **`exit 1`**: fallar el pipeline si todos los intentos fallaron
 
-**Reporte generado por cada ejecución** (`cucumber.json` → `format`):
-- `reports/cucumber-report.html` — reporte visual interactivo (descargable desde GitHub Actions → Artifacts)
-- `reports/cucumber-report.json` — reporte en JSON para integraciones futuras
+**Reporte generado por cada ejecución**:
+- `reports/cucumber-report.json` — generado por Cucumber (fuente para el reporte HTML)
+- `reports/html/index.html` — reporte visual interactivo generado por `multiple-cucumber-html-reporter`
+  - Charts de pass/fail/skipped
+  - Detalle paso a paso por escenario
+  - Screenshots embebidos automáticamente cuando un test falla
+  - Filtros por estado, duración personalizada, info del run
 
 **Cómo ver el reporte**:
 1. GitHub → Actions → clic en el run
 2. Sección **Artifacts** al final de la página
-3. Descargar `cucumber-report-{run_id}` → abrir `cucumber-report.html` en el navegador
+3. Descargar `cucumber-report-{run_id}` → abrir `index.html` en el navegador
 
 **Secrets necesarios en GitHub**:
 - `ATLASSIAN_BASE_URL` → `https://renatosistemas02.atlassian.net`
@@ -178,15 +203,25 @@ After(async function () { await browser.close(); });
 | Ticket | Título | Estado | Feature file |
 |--------|--------|--------|-------------|
 | SB-73 | Login Saucedemo | Automatizado | `src/tests/features/login.feature` |
+| SB-76 | Gestión del carrito de compras | Automatizado | `src/tests/features/cart.feature` |
 
 ## Comandos útiles
 
 ```bash
-# Correr todos los tests
+# Correr todos los tests (headless — modo CI)
 npm run cucumber
+
+# Correr con Chrome visible (modo local)
+npm run cucumber:headed
+
+# Generar reporte HTML desde el JSON
+npm run report
 
 # Correr solo un feature
 npx cucumber-js src/tests/features/login.feature
+
+# Correr solo un escenario por nombre
+npx cucumber-js --name "LO-1"
 
 # Verificar instalación Playwright
 npx playwright --version
@@ -211,5 +246,5 @@ gh run view {run-id} --repo RenatoCabezasAntezana/flujo-e2e-playwright-jira-gith
 
 - El módulo del proyecto es `commonjs` (no ESM) — usar `require()` o la config de ts-node
 - TypeScript necesita `tsconfig.json` con `"module": "commonjs"` y `"esModuleInterop": true`
-- El browser se lanza en `headless: true` siempre (entorno CI)
+- El browser usa `headless: process.env.HEADLESS !== "false"` — headless por defecto (CI), visible con `npm run cucumber:headed` (local)
 - La URL de SauceDemo es `https://www.saucedemo.com/` — usuarios de prueba: `standard_user`, `locked_out_user`, `problem_user`, `performance_glitch_user` — todos con password `secret_sauce`

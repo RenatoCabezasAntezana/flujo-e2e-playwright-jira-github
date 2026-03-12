@@ -100,12 +100,16 @@ jobs:
 
           echo "Vinculo creado: $BUG_KEY -> SB-73"
 
+      - name: Generar reporte HTML
+        if: always()
+        run: npm run report
+
       - name: Publicar reporte Cucumber
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: cucumber-report-${{ github.run_id }}
-          path: reports/
+          path: reports/html/
           retention-days: 30
 
       - name: Fallar el pipeline si los tests no pasaron
