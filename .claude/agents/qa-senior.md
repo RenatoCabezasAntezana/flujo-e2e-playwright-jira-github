@@ -126,12 +126,23 @@ After(async function () { await browser.close(); });
 **Flujo del pipeline**:
 1. Checkout + setup Node LTS
 2. `npm ci` + `npx playwright install chromium --with-deps`
-3. **Intento 1**: `npm run cucumber` (`continue-on-error: true`)
-4. **Healing intento 2**: solo si intento 1 falló
-5. **Healing intento 3**: solo si intento 2 falló
-6. **Evaluar resultado**: si algún intento pasó → `status=passed`, si todos fallaron → `status=failed`
-7. **Si `status=failed`**: crear Bug en Jira (proyecto SB, tipo Bug, prioridad High) + vincular con "Blocks" al ticket de la historia
-8. **`exit 1`**: fallar el pipeline si todos los intentos fallaron
+3. `mkdir -p reports` — crea la carpeta de reportes antes de correr tests
+4. **Intento 1**: `npm run cucumber` (`continue-on-error: true`)
+5. **Healing intento 2**: solo si intento 1 falló
+6. **Healing intento 3**: solo si intento 2 falló
+7. **Evaluar resultado**: si algún intento pasó → `status=passed`, si todos fallaron → `status=failed`
+8. **Si `status=failed`**: crear Bug en Jira (proyecto SB, tipo Bug, prioridad High) + vincular con "Blocks" al ticket de la historia
+9. **Publicar reporte**: `actions/upload-artifact@v4` con `if: always()` — sube `reports/` como artifact `cucumber-report-{run_id}` con retención de 30 días (se ejecuta siempre, pase o falle)
+10. **`exit 1`**: fallar el pipeline si todos los intentos fallaron
+
+**Reporte generado por cada ejecución** (`cucumber.json` → `format`):
+- `reports/cucumber-report.html` — reporte visual interactivo (descargable desde GitHub Actions → Artifacts)
+- `reports/cucumber-report.json` — reporte en JSON para integraciones futuras
+
+**Cómo ver el reporte**:
+1. GitHub → Actions → clic en el run
+2. Sección **Artifacts** al final de la página
+3. Descargar `cucumber-report-{run_id}` → abrir `cucumber-report.html` en el navegador
 
 **Secrets necesarios en GitHub**:
 - `ATLASSIAN_BASE_URL` → `https://renatosistemas02.atlassian.net`
