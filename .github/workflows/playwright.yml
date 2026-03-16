@@ -1,4 +1,4 @@
-name: E2E Tests - SauceDemo Login
+name: E2E Tests - SauceDemo
 
 on:
   push:
