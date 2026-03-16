@@ -100,6 +100,32 @@ jobs:
 
           echo "Vinculo creado: $BUG_KEY -> SB-73"
 
+      - name: Notificar resultado a Slack
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          STATUS="${{ steps.final_result.outputs.status }}"
+          BRANCH="${{ github.ref_name }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          if [ "$STATUS" == "passed" ]; then
+            RESULTADO="✅ Todos los tests pasaron"
+            EMOJI="✅"
+          else
+            RESULTADO="❌ Los tests fallaron después de 3 intentos"
+            EMOJI="❌"
+          fi
+
+          curl -s -X POST "$SLACK_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"status\": \"$EMOJI $STATUS\",
+              \"branch\": \"$BRANCH\",
+              \"resultado\": \"$RESULTADO\",
+              \"run_url\": \"$RUN_URL\"
+            }"
+
       - name: Publicar reporte Cucumber
         uses: actions/upload-artifact@v4
         if: always()
