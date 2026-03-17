@@ -108,6 +108,37 @@ jobs:
           path: reports/
           retention-days: 30
 
+      - name: Notificar resultados en Slack
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          STATUS="${{ steps.final_result.outputs.status }}"
+          if [ "$STATUS" == "passed" ]; then
+            EMOJI=":white_check_mark:"
+            COLOR="good"
+            MENSAJE="Tests E2E pasaron correctamente"
+          else
+            EMOJI=":x:"
+            COLOR="danger"
+            BUG_KEY="${{ steps.create_bug.outputs.bug_key }}"
+            MENSAJE="Tests E2E fallaron después de 3 intentos. Bug creado: $BUG_KEY"
+          fi
+
+          curl -s -X POST "$SLACK_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"attachments\": [{
+                \"color\": \"$COLOR\",
+                \"title\": \"$EMOJI Pipeline E2E - SauceDemo Login\",
+                \"text\": \"$MENSAJE\",
+                \"fields\": [
+                  { \"title\": \"Branch\", \"value\": \"${{ github.ref_name }}\", \"short\": true },
+                  { \"title\": \"Run\", \"value\": \"<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Ver reporte>\", \"short\": true }
+                ]
+              }]
+            }"
+
       - name: Fallar el pipeline si los tests no pasaron
         if: steps.final_result.outputs.status == 'failed'
         run: exit 1
