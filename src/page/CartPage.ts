@@ -1,10 +1,27 @@
 import { Page } from "@playwright/test";
 
+// Mapa de nombre de producto a slug usado en los data-test de SauceDemo
+const PRODUCT_SLUG_MAP: Record<string, string> = {
+    "Sauce Labs Backpack": "sauce-labs-backpack",
+    "Sauce Labs Bike Light": "sauce-labs-bike-light",
+    "Sauce Labs Bolt T-Shirt": "sauce-labs-bolt-t-shirt",
+    "Sauce Labs Fleece Jacket": "sauce-labs-fleece-jacket",
+    "Sauce Labs Onesie": "sauce-labs-onesie",
+    "Test.allTheThings() T-Shirt (Red)": "test.allthethings()-t-shirt-(red)",
+};
+
 export class CartPage {
     private readonly inventoryUrl = "https://www.saucedemo.com/inventory.html";
     private readonly cartUrl = "https://www.saucedemo.com/cart.html";
 
     constructor(private page: Page) {}
+
+    // Convierte nombre de producto a slug para los selectores data-test
+    private slugFor(productName: string): string {
+        const slug = PRODUCT_SLUG_MAP[productName];
+        if (!slug) throw new Error(`Slug no encontrado para el producto: "${productName}"`);
+        return slug;
+    }
 
     async navigateToInventory() {
         await this.page.goto(this.inventoryUrl);
@@ -14,19 +31,24 @@ export class CartPage {
         await this.page.goto(this.cartUrl);
     }
 
-    async addProduct(slug: string) {
-        await this.page.click(`[data-test="add-to-cart-${slug}"]`);
+    async addProductByName(productName: string) {
+        const slug = this.slugFor(productName);
+        await this.page.locator(`[data-test="add-to-cart-${slug}"]`).click();
     }
 
-    async removeProductFromInventory(slug: string) {
-        await this.page.click(`[data-test="remove-${slug}"]`);
+    async removeProductFromInventoryByName(productName: string) {
+        const slug = this.slugFor(productName);
+        await this.page.locator(`[data-test="remove-${slug}"]`).click();
     }
 
-    async removeProductFromCart(slug: string) {
-        await this.page.click(`[data-test="remove-${slug}"]`);
+    async removeProductFromCartByName(productName: string) {
+        const slug = this.slugFor(productName);
+        await this.page.locator(`[data-test="remove-${slug}"]`).click();
     }
 
-    async getProductButtonText(slug: string): Promise<string> {
+    // Devuelve el texto del botón del producto: "Remove" o "Add to cart"
+    async getProductButtonText(productName: string): Promise<string> {
+        const slug = this.slugFor(productName);
         const removeBtn = this.page.locator(`[data-test="remove-${slug}"]`);
         if (await removeBtn.isVisible()) return "Remove";
         return "Add to cart";
@@ -42,36 +64,56 @@ export class CartPage {
         return this.page.locator('[data-test="shopping-cart-badge"]').isVisible();
     }
 
-    async goToCart() {
-        await this.page.click('[data-test="shopping-cart-link"]');
+    async goToCartViaHeader() {
+        await this.page.locator('[data-test="shopping-cart-link"]').click();
         await this.page.waitForURL("**/cart.html");
     }
 
     async isOnCartPage(): Promise<boolean> {
-        await this.page.waitForURL("**/cart.html");
-        return this.page.locator(".cart_list").isVisible();
+        return this.page.url().includes("/cart.html");
     }
 
-    async isProductInCart(): Promise<boolean> {
-        return this.page.locator(".cart_item").isVisible();
+    // Verifica que el título de la página del carrito sea "Your Cart"
+    async getCartPageTitle(): Promise<string> {
+        const title = this.page.locator('[data-test="title"]');
+        await title.waitFor({ state: "visible" });
+        return (await title.textContent()) ?? "";
     }
 
-    async isCartEmpty(): Promise<boolean> {
-        return (await this.page.locator(".cart_item").count()) === 0;
+    // Verifica que las columnas QTY y Description sean visibles
+    async isQtyColumnVisible(): Promise<boolean> {
+        return this.page.locator('[data-test="cart-quantity-label"]').isVisible();
     }
 
-    async getFirstCartItemName(): Promise<string> {
-        const name = this.page.locator(".inventory_item_name").first();
-        await name.waitFor({ state: "visible" });
-        return name.innerText();
+    async isDescriptionColumnVisible(): Promise<boolean> {
+        return this.page.locator('[data-test="cart-desc-label"]').isVisible();
     }
 
-    async isCartItemQtyVisible(): Promise<boolean> {
-        return this.page.locator(".cart_quantity").first().isVisible();
+    // Verifica que un producto específico esté en el carrito por nombre
+    async isProductInCartByName(productName: string): Promise<boolean> {
+        const items = this.page.locator(".cart_item .inventory_item_name");
+        const count = await items.count();
+        for (let i = 0; i < count; i++) {
+            const text = await items.nth(i).textContent();
+            if (text?.trim() === productName) return true;
+        }
+        return false;
     }
 
-    async isCartItemPriceVisible(): Promise<boolean> {
-        return this.page.locator(".inventory_item_price").first().isVisible();
+    // Verifica la cantidad del producto en el carrito (columna QTY)
+    async getProductQtyInCart(productName: string): Promise<number> {
+        const items = this.page.locator(".cart_item");
+        const count = await items.count();
+        for (let i = 0; i < count; i++) {
+            const nameEl = items.nth(i).locator(".inventory_item_name");
+            const name = await nameEl.textContent();
+            if (name?.trim() === productName) {
+                const qtyEl = items.nth(i).locator(".cart_quantity");
+                const qty = await qtyEl.textContent();
+                return parseInt(qty ?? "0", 10);
+            }
+        }
+        return 0;
     }
 
     async isContinueShoppingVisible(): Promise<boolean> {
@@ -80,5 +122,9 @@ export class CartPage {
 
     async isCheckoutVisible(): Promise<boolean> {
         return this.page.locator('[data-test="checkout"]').isVisible();
+    }
+
+    async isCartEmpty(): Promise<boolean> {
+        return (await this.page.locator(".cart_item").count()) === 0;
     }
 }
