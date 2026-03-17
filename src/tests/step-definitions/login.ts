@@ -8,13 +8,18 @@ let page: Page;
 let loginPage: LoginPage;
 
 Before(async function () {
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch({ headless: process.env.HEADLESS !== "false" });
     context = await browser.newContext();
     page = await context.newPage();
     loginPage = new LoginPage(page);
 });
 
-After(async function () {
+After(async function (scenario) {
+    // Captura screenshot automático al fallar — se embebe en el reporte HTML
+    if (scenario.result?.status === "FAILED") {
+        const screenshot = await page.screenshot({ fullPage: true });
+        this.attach(screenshot, "image/png");
+    }
     await browser.close();
 });
 
@@ -31,12 +36,8 @@ Then("el sistema debe mostrar la pantalla principal de productos", async functio
     expect(onProducts).toBe(true);
 });
 
-Then("el sistema debe mostrar un mensaje de error indicando que los datos no coinciden", async function () {
+// Step parametrizado: verifica el mensaje de error exacto devuelto por la app
+Then("el sistema debe mostrar el mensaje de error {string}", async function (expectedMessage: string) {
     const errorMessage = await loginPage.getErrorMessage();
-    expect(errorMessage).toContain("Username and password do not match");
-});
-
-Then("el sistema debe mostrar un mensaje informando que el usuario esta bloqueado", async function () {
-    const errorMessage = await loginPage.getErrorMessage();
-    expect(errorMessage).toContain("Sorry, this user has been locked out");
+    expect(errorMessage).toBe(expectedMessage);
 });
