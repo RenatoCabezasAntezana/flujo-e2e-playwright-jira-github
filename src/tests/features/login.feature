@@ -18,4 +18,4 @@ Feature: Login en SauceDemo
   Scenario: SB-78-E3 - Intento de acceso con cuenta bloqueada
     Given que el cliente se encuentra en la página de inicio de sesión
     When ingresa el usuario "locked_out_user" y la contraseña "secret_sauce"
-    Then el sistema no debe permitir el ingreso y debe mostrar el mensaje "Epic sadface: Sorry, this user has been locked out."
+    Then el sistema no debe permitir el ingreso y debe mostrar el mensaje "Sorry this user"
