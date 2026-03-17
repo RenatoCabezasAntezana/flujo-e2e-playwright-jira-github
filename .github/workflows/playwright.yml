@@ -108,32 +108,34 @@ jobs:
           path: reports/
           retention-days: 30
 
-      - name: Notificar resultados en Slack
+      - name: Publicar reporte en Surge.sh
+        if: always()
+        env:
+          SURGE_TOKEN: ${{ secrets.SURGE_TOKEN }}
+        run: |
+          npx surge ./reports ${{ secrets.SURGE_DOMAIN }} --token $SURGE_TOKEN
+      - name: Notificar resultado a Slack
         if: always()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           STATUS="${{ steps.final_result.outputs.status }}"
+          BRANCH="${{ github.ref_name }}"
+          REPORT_URL="https://${{ secrets.SURGE_DOMAIN }}/cucumber-report.html"
           if [ "$STATUS" == "passed" ]; then
-            EMOJI=":white_check_mark:"
-            COLOR="good"
-            MENSAJE="Tests E2E pasaron correctamente"
+            RESULTADO="✅ Todos los tests pasaron"
+            EMOJI="✅"
           else
-            EMOJI=":x:"
-            COLOR="danger"
-            BUG_KEY="${{ steps.create_bug.outputs.bug_key }}"
-            MENSAJE="Tests E2E fallaron después de 3 intentos. Bug creado: $BUG_KEY"
+            RESULTADO="❌ Los tests fallaron después de 3 intentos"
+            EMOJI="❌"
           fi
-
-          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
           curl -s -X POST "$SLACK_WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d "{
-              \"estado\": \"$EMOJI $STATUS\",
-              \"rama\": \"${{ github.ref_name }}\",
-              \"resultado\": \"$MENSAJE\",
-              \"pipeline\": \"$RUN_URL\"
+              \"status\": \"$EMOJI $STATUS\",
+              \"branch\": \"$BRANCH\",
+              \"resultado\": \"$RESULTADO\",
+              \"run_url\": \"$REPORT_URL\"
             }"
 
       - name: Fallar el pipeline si los tests no pasaron
