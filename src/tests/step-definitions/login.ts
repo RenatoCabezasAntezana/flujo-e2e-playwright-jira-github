@@ -18,22 +18,26 @@ After(async function () {
     await browser.close();
 });
 
-Given("que el cliente se encuentra en la página de inicio de sesión", async function () {
+Given("que el cliente se encuentra en la pagina de inicio de sesion", async function () {
     await loginPage.navigate();
 });
 
-When("ingresa el usuario {string} y la contraseña {string}", async function (username: string, password: string) {
-    await loginPage.login(username, password);
+When("ingresa el usuario {string} y la contrasena {string}", async function (usuario: string, contrasena: string) {
+    await loginPage.login(usuario, contrasena);
 });
 
-Then("el sistema debe permitirle el ingreso y mostrar la pantalla principal de productos", async function () {
-    // Verifica que la URL cambia a /inventory.html tras el login exitoso
-    const onInventory = await loginPage.isOnInventoryPage();
-    expect(onInventory).toBe(true);
+When("intenta iniciar sesion sin ingresar credenciales", async function () {
+    await loginPage.clickLogin();
 });
 
-Then("el sistema no debe permitir el ingreso y debe mostrar el mensaje {string}", async function (expectedMessage: string) {
-    // Verifica que se muestra el mensaje de error exacto de la UI
-    const actualMessage = await loginPage.getErrorMessage();
-    expect(actualMessage).toContain(expectedMessage);
+Then("el sistema debe permitir el ingreso y mostrar la pantalla de productos", async function () {
+    const enInventario = await loginPage.isOnInventoryPage();
+    expect(enInventario).toBe(true);
+    const titulo = await loginPage.getInventoryTitle();
+    expect(titulo).toBe("Products");
+});
+
+Then("el sistema debe mostrar el mensaje {string}", async function (mensajeEsperado: string) {
+    const mensajeObtenido = await loginPage.getErrorMessage();
+    expect(mensajeObtenido).toContain(mensajeEsperado);
 });

@@ -3,11 +3,12 @@ import { Page } from "@playwright/test";
 export class LoginPage {
     private readonly url = "https://www.saucedemo.com/";
 
-    // Selectores validados en tiempo real contra saucedemo.com
+    // Selectores validados en exploración real de la UI (data-test attributes)
     private readonly usernameInput = '[data-test="username"]';
     private readonly passwordInput = '[data-test="password"]';
     private readonly loginButton = '[data-test="login-button"]';
     private readonly errorMessage = '[data-test="error"]';
+    private readonly inventoryTitle = '.title';
 
     constructor(private page: Page) {}
 
@@ -34,13 +35,17 @@ export class LoginPage {
     }
 
     async getErrorMessage(): Promise<string> {
-        // El mensaje de error aparece como heading h3 con data-test="error"
-        await this.page.waitForSelector(this.errorMessage, { state: "visible" });
-        return await this.page.textContent(this.errorMessage) ?? "";
+        await this.page.waitForSelector(this.errorMessage);
+        return await this.page.innerText(this.errorMessage);
     }
 
     async isOnInventoryPage(): Promise<boolean> {
         await this.page.waitForURL("**/inventory.html");
         return this.page.url().includes("/inventory.html");
+    }
+
+    async getInventoryTitle(): Promise<string> {
+        await this.page.waitForSelector(this.inventoryTitle);
+        return await this.page.innerText(this.inventoryTitle);
     }
 }
